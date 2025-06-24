@@ -23,7 +23,7 @@ try:
         path=os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     ).active_branch.name
 except Exception:
-    branch = "main"  # Изменено на main, но это не будет использоваться из-за отключения проверки
+    branch = "master"  # Изменено на main, но это не будет использоваться из-за отключения проверки
 
 
 async def check_branch(me_id: int, allowed_ids: list):
