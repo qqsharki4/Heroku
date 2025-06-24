@@ -23,12 +23,9 @@ try:
         path=os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     ).active_branch.name
 except Exception:
-    branch = "master"
+    branch = "main"  # Изменено на main, но это не будет использоваться из-за отключения проверки
 
 
 async def check_branch(me_id: int, allowed_ids: list):
-    if branch != "master" and me_id not in allowed_ids:
-        repo = git.Repo(path=os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-        repo.git.reset("--hard", "HEAD")
-        repo.git.checkout("master", force=True)
-        restart()
+    # Проверка ветки отключена, чтобы убрать зависимость от Git
+    pass
