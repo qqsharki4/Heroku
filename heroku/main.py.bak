@@ -11,10 +11,10 @@
 #    This program is distributed in the hope that it will be useful,
 #    but WITHOUT ANY WARRANTY; without even the implied warranty of
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU Lesser General Public License for more details.
+#    GNU Affero General Public License for more details.
 
-#    You should have received a copy of the GNU Lesser General Public License
-#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#    You should have received a copy of the GNU Affero General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 # ©️ Dan Gazizullin, 2021-2023
 # This file is a part of Hikka Userbot
@@ -388,7 +388,7 @@ class SuperList(list):
 
 
 class InteractiveAuthRequired(Exception):
-    """Is being raised by Telethon, if phone is required"""
+    """Is being rased by Telethon, if phone is required"""
 
 
 def raise_auth():
@@ -412,7 +412,7 @@ class Heroku:
         self.clients = SuperList()
         self.ready = asyncio.Event()
         self._read_sessions()
-        self._get_api_token()  # Initialize api_token here
+        self._get_api_token()
         self._get_proxy()
 
     def _get_proxy(self):
@@ -459,10 +459,10 @@ class Heroku:
         ]
 
     def _get_api_token(self):
-        """Get API Token from disk, environment, or set default"""
+        """Get API Token from disk or environment"""
         api_token_type = collections.namedtuple("api_token", ("ID", "HASH"))
 
-        # Try to retrieve credentials from config, or from env vars
+        # Try to retrieve credintials from config, or from env vars
         try:
             # Legacy migration
             if not get_config_key("api_id"):
@@ -477,38 +477,23 @@ class Heroku:
                 (Path(BASE_DIR) / "api_token.txt").unlink()
                 logging.debug("Migrated api_token.txt to config.json")
 
-            api_id = get_config_key("api_id")
-            api_hash = get_config_key("api_hash")
-            if api_id and api_hash:
-                logging.debug("Got API keys from config")
-                self.api_token = api_token_type(api_id, api_hash)
-                return
-        except FileNotFoundError:
-            pass
-
-        try:
-            from . import api_token
-            self.api_token = api_token_type(api_token.ID, api_token.HASH)
-            return
-        except ImportError:
-            pass
-
-        try:
-            self.api_token = api_token_type(
-                os.environ["api_id"],
-                os.environ["api_hash"],
+            api_token = api_token_type(
+                get_config_key("api_id"),
+                get_config_key("api_hash"),
             )
-            return
-        except KeyError:
-            pass
+        except FileNotFoundError:
+            try:
+                from . import api_token
+            except ImportError:
+                try:
+                    api_token = api_token_type(
+                        os.environ["api_id"],
+                        os.environ["api_hash"],
+                    )
+                except KeyError:
+                    api_token = None
 
-        # Set default API keys if none found
-        default_api_id = 27802914
-        default_api_hash = "10892afd16158709a22671df1bb5b907"
-        logging.info(f"Using default API keys: ID={default_api_id}, Hash={default_api_hash}")
-        save_config_key("api_id", default_api_id)
-        save_config_key("api_hash", default_api_hash)
-        self.api_token = api_token_type(default_api_id, default_api_hash)
+        self.api_token = api_token
 
     def _init_web(self):
         """Initialize web"""
@@ -528,7 +513,9 @@ class Heroku:
 
     async def _get_token(self):
         """Reads or waits for user to enter API credentials"""
-        if self.api_token is None and not self.arguments.no_auth:
+        while self.api_token is None:
+            if self.arguments.no_auth:
+                return
             if self.web:
                 await self.web.start(self.arguments.port, proxy_pass=True)
                 await self._web_banner()
@@ -869,11 +856,11 @@ class Heroku:
                 )
                 self.omit_log = True
 
-            await client.heroku_me_inline.bot.send_photo(
+            await client.heroku_inline.bot.send_photo(
                 logging.getLogger().handlers[0].get_logid_by_client(client.tg_id),
                 "https://imgur.com/a/uUF9zYL.png",
                 caption=(
-                    "🪐 <b>Heroku {} started!</b>\n\n⚙️ <b>GitHub commit SHA: <a"
+                    "🪐 <b>Heroku {} started!</b>\n\n⚙ <b>GitHub commit SHA: <a"
                     ' href="https://github.com/coddrago/Heroku/commit/{}">{}</a></b>\n🔎'
                     " <b>Update status: {}</b>\n<b>{}</b>".format(
                         ".".join(list(map(str, list(__version__)))),
@@ -968,10 +955,9 @@ class Heroku:
 
     async def _main(self):
         """Main entrypoint"""
-        self._get_api_token()  # Initialize api_token first
-        self._init_web()  # Then initialize web
+        self._init_web()
         save_config_key("port", self.arguments.port)
-        await self._get_token()  # Wait for API input via web if needed
+        await self._get_token()
 
         if (
             not self.clients and not self.sessions or not await self._init_clients()

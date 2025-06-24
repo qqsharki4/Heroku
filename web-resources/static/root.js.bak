@@ -1,0 +1,433 @@
+// Жёстко заданные API_ID и API_HASH (замените на свои значения)
+const API_ID = 1234567;
+const API_HASH = 'abcdef1234567890abcdef1234567890';
+
+function auth(c) {
+    $(".main").fadeOut(250);
+    setTimeout(() => {
+        $(".auth").hide().fadeIn(250, () => {
+            $("#tg_icon").html("");
+            bodymovin.loadAnimation({
+                container: document.getElementById("tg_icon"),
+                renderer: "canvas",
+                loop: true,
+                autoplay: true,
+                path: "https://assets9.lottiefiles.com/packages/lf20_bgqoyj8l.json",
+                rendererSettings: { clearCanvas: true }
+            });
+        });
+        fetch("/web_auth", {
+            method: "POST",
+            credentials: "include",
+            timeout: 25e4
+        })
+            .then(b => b.text())
+            .then(a => {
+                if (a === "TIMEOUT") {
+                    error_message("Code waiting timeout exceeded. Reload page and try again.");
+                    $(".auth").fadeOut(250);
+                } else if (a.startsWith("heroku_")) {
+                    $.cookie("session", a);
+                    auth_required = false;
+                    $(".authorized").hide().fadeIn(100);
+                    $(".auth").fadeOut(250, () => {
+                        $(".installation").fadeIn(250);
+                    });
+                    c();
+                }
+            });
+    }, 250);
+}
+
+var qr_interval = null,
+    qr_login = false,
+    old_qr_sizes = [
+        document.querySelector(".qr_inner").style.width,
+        document.querySelector(".qr_inner").style.height
+    ];
+
+document.querySelector(".qr_inner").style.width = "100px";
+document.querySelector(".qr_inner").style.height = "100px";
+
+function login_qr() {
+    $("#continue_btn").fadeOut(100);
+    $("#denyqr").hide().fadeIn(250);
+    $(".title, .description").fadeOut(250);
+    fetch("/init_qr_login", {
+        method: "POST",
+        credentials: "include"
+    })
+        .then(b => b.text())
+        .then(c => {
+            const d = new QRCodeStyling({
+                width: window.innerHeight / 3,
+                height: window.innerHeight / 3,
+                type: "svg",
+                data: c,
+                dotsOptions: { type: "rounded" },
+                cornersSquareOptions: { type: "extra-rounded" },
+                backgroundOptions: { color: "transparent" },
+                imageOptions: { imageSize: 0.4, margin: 8 },
+                qrOptions: { errorCorrectionLevel: "M" }
+            });
+            document.querySelector(".qr_inner").innerHTML = "";
+            document.querySelector(".qr_inner").style.width = old_qr_sizes[0];
+            document.querySelector(".qr_inner").style.height = old_qr_sizes[1];
+            d.append(document.querySelector(".qr_inner"));
+            qr_interval = setInterval(() => {
+                fetch("/get_qr_url", {
+                    method: "POST",
+                    credentials: "include"
+                })
+                    .then(b => b.text())
+                    .then(b => {
+                        if (b === "SUCCESS" || b === "2FA") {
+                            $("#block_qr_login").fadeOut(250);
+                            $("#denyqr").fadeOut(250);
+                            $("#continue_btn, .title, .description").hide().fadeIn(250);
+                            if (b === "SUCCESS") switch_block("custom_bot");
+                            if (b === "2FA") {
+                                show_2fa();
+                                qr_login = true;
+                            }
+                            clearInterval(qr_interval);
+                        } else {
+                            d.update({ data: b });
+                        }
+                    });
+            }, 1250);
+        });
+}
+
+$("#get_started").click(() => {
+    // Отправляем API_ID и API_HASH на сервер
+    fetch("/set_api", {
+        method: "POST",
+        credentials: "include",
+        body: `${API_ID}\n${API_HASH}`
+    }).then(b => {
+        if (b.ok) {
+            fetch("/can_add", {
+                method: "POST",
+                credentials: "include"
+            }).then(b => {
+                if (b.ok) {
+                    if (auth_required) {
+                        auth(() => $("#get_started").click());
+                    } else {
+                        $("#continue_btn").hide().fadeIn(250);
+                        $("#denyqr").hide();
+                        $("#get_started").fadeOut(250, () => {
+                            switch_block(_current_block);
+                        });
+                    }
+                } else {
+                    show_eula();
+                }
+            });
+        } else {
+            b.text().then(error => {
+                error_state();
+                error_message("Failed to set API credentials: " + error);
+            });
+        }
+    });
+});
+
+function isInt(c) {
+    var a = parseFloat(c);
+    return !isNaN(c) && (0 | a) === a;
+}
+
+function isValidPhone(b) {
+    return /^[+]?\d{11,13}$/.test(b);
+}
+
+function finish_login() {
+    console.log("Done");
+    $(".finish_block").fadeIn();
+    $("#installation_icon").html("");
+    $(".installation").fadeOut();
+    bodymovin.loadAnimation({
+        container: document.getElementById("installation_icon"),
+        renderer: "canvas",
+        loop: true,
+        autoplay: true,
+        path: "https://assets1.lottiefiles.com/packages/lf20_n3jgitst.json",
+        rendererSettings: { clearCanvas: true }
+    });
+}
+
+function show_2fa() {
+    $(".auth-code-form").hide().fadeIn(250, () => {
+        $("#monkey-close").html("");
+        var anim = bodymovin.loadAnimation({
+            container: document.getElementById("monkey-close"),
+            renderer: "canvas",
+            loop: true,
+            autoplay: true,
+            path: "https://assets1.lottiefiles.com/packages/lf20_eg88dyk9.json",
+            rendererSettings: { clearCanvas: true }
+        });
+        anim.addEventListener("complete", () => {
+            setTimeout(() => anim.goToAndPlay(0), 2e3);
+        });
+    });
+    $(".code-input").removeAttr("disabled");
+    $(".code-input").attr("inputmode", "text");
+    $(".code-input").attr("autocomplete", "off");
+    $(".code-input").attr("autocorrect", "off");
+    $(".code-input").attr("autocapitalize", "off");
+    $(".code-input").attr("spellcheck", "false");
+    $(".code-input").attr("type", "password");
+    $(".enter").hasClass("tgcode") && $(".enter").removeClass("tgcode");
+    $(".code-caption").html("Enter your Telegram 2FA password, then press <span style='color: #dc137b;'>Enter</span>");
+    cnt_btn.setAttribute("current-step", "2fa");
+    $("#monkey").hide();
+    $("#monkey-close").hide().fadeIn(100);
+    _current_block = "2fa";
+}
+
+function show_eula() {
+    $(".main").fadeOut(250);
+    $(".eula-form").hide().fadeIn(250, () => {
+        $("#law").html("");
+        var anim = bodymovin.loadAnimation({
+            container: document.getElementById("law"),
+            renderer: "canvas",
+            loop: true,
+            autoplay: true,
+            path: "https://static.dan.tatar/forbidden.json",
+            rendererSettings: { clearCanvas: true }
+        });
+    });
+}
+
+function tg_code(b = false) {
+    if (b && qr_login) {
+        fetch("/qr_2fa", {
+            method: "POST",
+            credentials: "include",
+            body: _2fa_pass
+        }).then(b => {
+            if (b.ok) {
+                console.log("ok");
+                finish_login();
+                $("#block_phone").fadeOut();
+                $(".auth-code-form").fadeOut();
+            } else {
+                $(".code-input").removeAttr("disabled");
+                b.text().then(b => {
+                    error_state();
+                    Swal.fire("Error", b, "error");
+                });
+            }
+        });
+    } else {
+        fetch("/tg_code", {
+            method: "POST",
+            body: `${_tg_pass}\n${_phone}\n${_2fa_pass}`
+        })
+            .then(b => {
+                if (b.ok) {
+                    console.log("ok");
+                    finish_login();
+                    $("#block_phone").fadeOut();
+                    $(".auth-code-form").fadeOut();
+                } else if (b.status === 401) {
+                    show_2fa();
+                } else {
+                    $(".code-input").removeAttr("disabled");
+                    b.text().then(b => {
+                        error_state();
+                        Swal.fire("Error", b, "error");
+                    });
+                }
+            })
+            .catch(b => {
+                Swal.showValidationMessage(`Auth failed: ${b.toString()}`);
+            });
+    }
+}
+
+function switch_block(b) {
+    cnt_btn.setAttribute("current-step", b);
+    try {
+        $(`#block_${_current_block}`).fadeOut(() => {
+            $(`#block_${b}`).hide().fadeIn();
+        });
+    } catch {
+        $(`#block_${b}`).hide().fadeIn();
+    }
+    _current_block = b;
+    if (_current_block === "qr_login") login_qr();
+}
+
+function error_message(b) {
+    Swal.fire({ icon: "error", title: b });
+}
+
+function error_state() {
+    $("body").addClass("red_state");
+    cnt_btn.disabled = true;
+    setTimeout(() => {
+        cnt_btn.disabled = false;
+        $("body").removeClass("red_state");
+    }, 1e3);
+}
+
+var _phone = "",
+    _2fa_pass = "",
+    _tg_pass = "",
+    _current_block = is_phone() ? "phone" : "qr_login";
+
+function is_phone() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|BB|PlayBook|IEMobile|Windows Phone|Kindle|Silk|Opera Mini/i.test(navigator.userAgent);
+}
+
+const cnt_btn = document.querySelector("#continue_btn");
+
+function process_next() {
+    let b = cnt_btn.getAttribute("current-step");
+    if (b === "phone") {
+        let b = document.querySelector("#phone").value;
+        if (!isValidPhone(b)) return error_state();
+        _phone = b;
+        fetch("/send_tg_code", {
+            method: "POST",
+            body: _phone,
+            credentials: "include"
+        })
+            .then(b => {
+                if (b.ok) {
+                    $(".auth-code-form").hide().fadeIn(250, () => {
+                        $("#monkey").html("");
+                        var anim2 = bodymovin.loadAnimation({
+                            container: document.getElementById("monkey"),
+                            renderer: "canvas",
+                            loop: false,
+                            autoplay: true,
+                            path: "https://assets8.lottiefiles.com/private_files/lf30_t52znxni.json",
+                            rendererSettings: { clearCanvas: true }
+                        });
+                        anim2.addEventListener("complete", () => {
+                            setTimeout(() => anim2.goToAndPlay(0), 2e3);
+                        });
+                    });
+                    $(".code-input").removeAttr("disabled");
+                    $(".enter").addClass("tgcode");
+                    $(".code-caption").text("Enter the code you received in Telegram");
+                    $(".code-input").attr("autocomplete", "off");
+                    $(".code-input").attr("autocorrect", "off");
+                    $(".code-input").attr("autocapitalize", "off");
+                    $(".code-input").attr("spellcheck", "false");
+                    $(".code-input").attr("type", "number");
+                    cnt_btn.setAttribute("current-step", "code");
+                    _current_block = "code";
+                } else if (b.status === 403) {
+                    show_eula();
+                } else {
+                    b.text().then(b => {
+                        error_state();
+                        error_message(b);
+                    });
+                }
+            })
+            .catch(b => {
+                error_state();
+                error_message("Code send failed: " + b.toString());
+            });
+    } else if (b === "2fa") {
+        let b = document.querySelector(".code-input").value;
+        _2fa_pass = b;
+        $(".code-input").attr("disabled", "true");
+        $(".code-input").val("");
+        tg_code(qr_login);
+    } else if (b === "custom_bot") {
+        let b = document.querySelector("#custom_bot").value;
+        if (b !== "" && (!b.toLowerCase().endsWith("bot") || b.length < 5)) {
+            Swal.fire({
+                icon: "error",
+                title: "Bot username invalid",
+                text: "It must end with `bot` and be at least 5 symbols in length"
+            });
+        } else if (b === "") {
+            finish_login();
+        } else {
+            fetch("/custom_bot", {
+                method: "POST",
+                credentials: "include",
+                body: b
+            })
+                .then(b => b.text())
+                .then(b => {
+                    if (b === "OCCUPIED") {
+                        Swal.fire({
+                            icon: "error",
+                            title: "This bot username is already occupied!"
+                        });
+                    } else {
+                        finish_login();
+                    }
+                })
+                .catch(b => {
+                    error_state();
+                    error_message("Custom bot setting error: " + b.toString());
+                });
+        }
+    }
+}
+
+cnt_btn.onclick = () => {
+    if (cnt_btn.disabled) return;
+    if (auth_required) {
+        auth(() => cnt_btn.click());
+    } else {
+        process_next();
+    }
+};
+
+$("#denyqr").on("click", () => {
+    if (qr_interval) clearInterval(qr_interval);
+    $("#denyqr").fadeOut(250);
+    $("#continue_btn, .title, .description").hide().fadeIn(250);
+    switch_block("phone");
+});
+
+$(".installation input").on("keyup", b => {
+    if (cnt_btn.disabled) return;
+    if (auth_required) {
+        auth(() => cnt_btn.click());
+    } else if (b.key === "Enter" || b.keyCode === 13) {
+        process_next();
+    }
+});
+
+$(".code-input").on("keyup", b => {
+    if (_current_block === "code" && $(".code-input").val().length === 5) {
+        _tg_pass = $(".code-input").val();
+        $(".code-input").attr("disabled", "true");
+        $(".code-input").val("");
+        tg_code();
+    } else if (_current_block === "2fa" && (b.key === "Enter" || b.keyCode === 13)) {
+        let b = $(".code-input").val();
+        _2fa_pass = b;
+        $(".code-input").attr("disabled", "true");
+        $(".code-input").val("");
+        tg_code(qr_login);
+    }
+});
+
+$(".enter").on("click", () => {
+    if (_current_block === "2fa") {
+        let b = $(".code-input").val();
+        _2fa_pass = b;
+        $(".code-input").attr("disabled", "true");
+        $(".code-input").val("");
+        tg_code(qr_login);
+    }
+});
+
+$(document).ready(() => {
+    new Sakura("body");
+});

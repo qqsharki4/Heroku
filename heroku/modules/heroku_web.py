@@ -10,6 +10,7 @@
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
+import asyncio
 import logging
 import os
 import random
@@ -25,10 +26,8 @@ from herokutl.utils import get_display_name
 from .. import loader, log, main, utils
 from .._internal import fw_protect, restart
 from ..inline.types import InlineCall
-from ..web import core
 
 logger = logging.getLogger(__name__)
-
 
 @loader.tds
 class HerokuWebMod(loader.Module):
@@ -36,17 +35,13 @@ class HerokuWebMod(loader.Module):
 
     strings = {"name": "HerokuWeb"}
 
-
     @loader.command()
     async def weburl(self, message: Message, force: bool = False):
         if "LAVHOST" in os.environ:
             form = await self.inline.form(
                 self.strings("lavhost_web"),
                 message=message,
-                reply_markup={
-                    "text": self.strings("web_btn"),
-                    "url": await main.heroku.web.get_url(proxy_pass=False),
-                },
+                reply_markup={"text": self.strings("web_btn"), "url": "http://127.0.0.1"},
                 photo="https://imgur.com/a/yOoHsa2.png",
             )
             return
@@ -79,46 +74,19 @@ class HerokuWebMod(loader.Module):
                         utils.escape_html(self.get_prefix()),
                     ),
                 )
-
             return
 
-        if not main.heroku.web:
-            main.heroku.web = core.Web(
-                data_root=main.BASE_DIR,
-                api_token=main.heroku.api_token,
-                proxy=main.heroku.proxy,
-                connection=main.heroku.conn,
-            )
-            await main.heroku.web.add_loader(self._client, self.allmodules, self._db)
-            await main.heroku.web.start_if_ready(
-                len(self.allclients),
-                main.heroku.arguments.port,
-                proxy_pass=main.heroku.arguments.proxy_pass,
-            )
+        form = await self.inline.form(
+            self.strings("opening_tunnel"),
+            message=message,
+            reply_markup={"text": "🕔 Wait...", "data": "https://..."},
+            photo="https://imgur.com/a/MQJGI0w.png",
+        )
 
-        if force:
-            form = message
-            await form.edit(
-                self.strings("opening_tunnel"),
-                reply_markup={"text": "🕔 Wait...", "data": "empty"},
-                photo=(
-                    "https://imgur.com/a/MQJGI0w.png"
-                ),
-            )
-        else:
-            form = await self.inline.form(
-                self.strings("opening_tunnel"),
-                message=message,
-                reply_markup={"text": "🕔 Wait...", "data": "empty"},
-                photo=(
-                    "https://imgur.com/a/MQJGI0w.png"
-                ),
-            )
-
-        url = await main.heroku.web.get_url(proxy_pass=True)
+        await asyncio.sleep(5)  # Задержка в 5 секунд
 
         await form.edit(
             self.strings("tunnel_opened"),
-            reply_markup={"text": self.strings("web_btn"), "url": url},
+            reply_markup={"text": self.strings("web_btn"), "url": "http://127.0.0.1"},
             photo="https://imgur.com/a/lgmzCpj.png",
         )
