@@ -83,7 +83,7 @@ class HerokuWebMod(loader.Module):
             photo="https://imgur.com/a/MQJGI0w.png",
         )
 
-        await asyncio.sleep(5)  # Задержка в 5 секунд
+       # await asyncio.sleep(5)  # Задержка в 5 секунд
 
         await form.edit(
             self.strings("tunnel_opened"),
