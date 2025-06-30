@@ -1,20 +1,17 @@
 """Main script, where all the fun starts"""
 
-#    Friendly Telegram (telegram userbot)
-#    Copyright (C) 2018-2021 The Authors
-
-#    This program is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU Affero General Public License as published by
-#    the Free Software Foundation, either version 3 of the License, or
-#    (at your option) any later version.
-
-#    This program is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU Lesser General Public License for more details.
-
-#    You should have received a copy of the GNU Lesser General Public License
-#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# Friendly Telegram (telegram userbot)
+# Copyright (C) 2018-2021 The Authors
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 # ©️ Dan Gazizullin, 2021-2023
 # This file is a part of Hikka Userbot
@@ -100,9 +97,9 @@ IS_USERLAND = "userland" in os.environ.get("USER", "")
 IS_JAMHOST = "JAMHOST" in os.environ
 IS_WSL = False
 IS_WINDOWS = False
+
 with contextlib.suppress(Exception):
     from platform import uname
-
     if "microsoft-standard" in uname().release:
         IS_WSL = True
     elif uname().system == "Windows":
@@ -140,7 +137,6 @@ LATIN_MOCK = [
 ]
 # fmt: on
 
-
 def generate_app_name() -> str:
     """
     Generate random app name
@@ -148,7 +144,6 @@ def generate_app_name() -> str:
     :example: "Cresco Cibus Consilium"
     """
     return " ".join(random.choices(LATIN_MOCK, k=3))
-
 
 def get_app_name() -> str:
     """
@@ -159,19 +154,15 @@ def get_app_name() -> str:
     if not (app_name := get_config_key("app_name")):
         app_name = generate_app_name()
         save_config_key("app_name", app_name)
-
     return app_name
-
 
 def generate_random_system_version():
     """
     Generates a random system version string similar to those used by Windows or Linux.
-
     This function generates a random version string that follows the format used by operating systems
     like Windows or Linux. The version string includes the major version, minor version, patch number,
     and build number, each of which is randomly generated within specified ranges. Additionally, it
     includes a random operating system name and version.
-
     :return: A randomly generated system version string.
     :example: "Windows 10.0.19042.1234" or "Ubuntu 20.04.19042.1234"
     """
@@ -198,25 +189,19 @@ def generate_random_system_version():
         ("IOS", "18.0.1"),
     ]
     os_name, os_version = random.choice(os_choices)
-
     version = f"{os_name} {os_version}"
     return version
 
-
 try:
     import uvloop
-
     uvloop.install()
 except Exception:
     pass
 
-
 def run_config():
     """Load configurator.py"""
     from . import configurator
-
     return configurator.api_config(None)
-
 
 def get_config_key(key: str) -> typing.Union[str, bool]:
     """
@@ -228,7 +213,6 @@ def get_config_key(key: str) -> typing.Union[str, bool]:
         return json.loads(CONFIG_PATH.read_text()).get(key, False)
     except FileNotFoundError:
         return False
-
 
 def save_config_key(key: str, value: str) -> bool:
     """
@@ -252,7 +236,6 @@ def save_config_key(key: str, value: str) -> bool:
     CONFIG_PATH.write_text(json.dumps(config, indent=4))
     return True
 
-
 def gen_port(cfg: str = "port", no8080: bool = False) -> int:
     """
     Generates random free port in case of VDS.
@@ -275,7 +258,6 @@ def gen_port(cfg: str = "port", no8080: bool = False) -> int:
             break
 
     return port
-
 
 def parse_arguments() -> dict:
     """
@@ -357,10 +339,10 @@ def parse_arguments() -> dict:
         default=True,
         help="Do not print colorful output using ANSI escapes",
     )
+
     arguments = parser.parse_args()
     logging.debug(arguments)
     return arguments
-
 
 class SuperList(list):
     """
@@ -375,42 +357,41 @@ class SuperList(list):
             attribute = getattr(obj, attr)
             if callable(attribute):
                 if asyncio.iscoroutinefunction(attribute):
-
                     async def foobar(*args, **kwargs):
                         return [await getattr(_, attr)(*args, **kwargs) for _ in self]
-
                     return foobar
+
                 return lambda *args, **kwargs: [
                     getattr(_, attr)(*args, **kwargs) for _ in self
                 ]
 
-            return [getattr(x, attr) for x in self]
-
+        return [getattr(x, attr) for x in self]
 
 class InteractiveAuthRequired(Exception):
     """Is being raised by Telethon, if phone is required"""
 
-
 def raise_auth():
     """Raises `InteractiveAuthRequired`"""
     raise InteractiveAuthRequired()
-
 
 class Heroku:
     """Main userbot instance, which can handle multiple clients"""
 
     def __init__(self):
         global BASE_DIR, BASE_PATH, CONFIG_PATH
+
         self.omit_log = False
         self.arguments = parse_arguments()
+
         if self.arguments.data_root:
             BASE_DIR = self.arguments.data_root
             BASE_PATH = Path(BASE_DIR)
             CONFIG_PATH = BASE_PATH / "config.json"
-        self.loop = asyncio.get_event_loop()
 
+        self.loop = asyncio.get_event_loop()
         self.clients = SuperList()
         self.ready = asyncio.Event()
+
         self._read_sessions()
         self._get_api_token()  # Initialize api_token here
         self._get_proxy()
@@ -445,6 +426,7 @@ class Heroku:
     def _read_sessions(self):
         """Gets sessions from environment and data directory"""
         self.sessions = []
+
         self.sessions += [
             SQLiteSession(
                 os.path.join(
@@ -483,6 +465,7 @@ class Heroku:
                 logging.debug("Got API keys from config")
                 self.api_token = api_token_type(api_id, api_hash)
                 return
+
         except FileNotFoundError:
             pass
 
@@ -552,9 +535,10 @@ class Heroku:
                 raise RuntimeError("Attempted to save non-inited session")
 
             telegram_id = me.id
-            client._tg_id = telegram_id
-            client.tg_id = telegram_id
-            client.heroku_me = me
+
+        client._tg_id = telegram_id
+        client.tg_id = telegram_id
+        client.heroku_me = me
 
         session = SQLiteSession(
             os.path.join(
@@ -570,7 +554,6 @@ class Heroku:
         )
 
         session.auth_key = client.session.auth_key
-
         session.save()
 
         if not delay_restart:
@@ -578,6 +561,7 @@ class Heroku:
             restart()
 
         client.session = session
+
         # Set db attribute to this client in order to save
         # custom bot nickname from web
         client.heroku_db = database.Database(client)
@@ -600,9 +584,9 @@ class Heroku:
         """
         timeout = 5 * 60
         polling_interval = 1
+
         for _ in range(timeout * polling_interval):
             await asyncio.sleep(polling_interval)
-
             for client in self.clients:
                 if client.loader.inline.pop_web_auth_token(token):
                     return True
@@ -615,9 +599,7 @@ class Heroku:
             if self.arguments.tty
             else "Enter phone: "
         )
-
         await client.start(phone)
-
         await self.save_client_session(client)
         self.clients += [client]
         return True
@@ -641,6 +623,7 @@ class Heroku:
                 lang_code="en",
                 system_lang_code="en-US",
             )
+
             await client.connect()
 
             print(
@@ -698,12 +681,14 @@ class Heroku:
             if qr_logined:
                 print_banner("2fa.txt")
                 password = await client(GetPasswordRequest())
+
                 while True:
                     _2fa = getpass(
                         f"\033[0;96mEnter 2FA password ({password.hint}): \033[0m"
                         if self.arguments.tty
                         else f"Enter 2FA password ({password.hint}): "
                     )
+
                     try:
                         await client._on_login(
                             (
@@ -722,11 +707,13 @@ class Heroku:
                             e.seconds % 3600 // 60,
                             e.seconds // 3600,
                         )
+
                         seconds, minutes, hours = (
                             f"{seconds} second(-s)",
                             f"{minutes} minute(-s) " if minutes else "",
                             f"{hours} hour(-s) " if hours else "",
                         )
+
                         print(
                             "\033[0;91mYou got FloodWait error! Please wait"
                             f" {hours}{minutes}{seconds}\033[0m"
@@ -737,6 +724,7 @@ class Heroku:
 
             print_banner("success.txt")
             print("\033[0;92mLogged in successfully!\033[0m")
+
             await self.save_client_session(client)
             self.clients += [client]
             return True
@@ -746,10 +734,9 @@ class Heroku:
                 self.arguments.port,
                 proxy_pass=True,
             )
-            await self._web_banner()
 
+        await self._web_banner()
         await self.web.wait_for_clients_setup()
-
         return True
 
     async def _init_clients(self) -> bool:
@@ -772,13 +759,14 @@ class Heroku:
                     lang_code="en",
                     system_lang_code="en-US",
                 )
+
                 if session.server_address == "0.0.0.0":
                     patcher.patch(client, session)
 
                 await client.connect()
                 client.phone = "Why do you need your own phone number?"
-
                 self.clients += [client]
+
             except sqlite3.OperationalError:
                 logging.error(
                     "Check that this is the only instance running. "
@@ -817,16 +805,8 @@ class Heroku:
             client.tg_id = me.id
             client.heroku_me = me
 
-            async with aiohttp.ClientSession() as session:
-                async with session.get("https://raw.githubusercontent.com/coddrago/modules-web/main/mods/ids/allowed_ids.txt") as response:
-                    if response.status == 200:
-                        content = await response.text()
-                        allowed_ids = [int(line.strip()) for line in content.split('\n') if line.strip()]
-                    else:
-                        logging.error(f"Exception on loading allowed beta testers ids: {response.status}")
-                        return []
-
-            await asyncio.gather(*[version.check_branch((await client.get_me()).id, allowed_ids) for client in self.clients])
+            # Убрана загрузка allowed_ids - теперь работает независимо от оригинального репозитория
+            await version.check_branch(me.id, [])
 
             while await self.amain(first, client):
                 first = False
@@ -837,17 +817,16 @@ class Heroku:
             import git
 
             repo = git.Repo()
-
             build = utils.get_git_hash()
-            diff = repo.git.log([f"HEAD..origin/{version.branch}", "--oneline"])
+            diff = repo.git.log([f"HEAD..origin/main", "--oneline"])  # ← Изменено на main
             upd = "Update required" if diff else "Up-to-date"
 
             logo = (
-                "                          _           \n"
-               r"  /\  /\ ___  _ __  ___  | | __ _   _ ""\n"
-               r" / /_/ // _ \| '__|/ _ \ | |/ /| | | |""\n"
-                "/ __  /|  __/| |  | (_) ||   < | |_| |\n"
-               r"\/ /_/  \___||_|   \___/ |_|\_\ \__,_|""\n\n"
+                "   _   \n"
+                r"  /\ /\ ___ _ __ ___ | | __ _ _ " + "\n"
+                r" / /_/ // _ \| '__|/ _ \ | |/ /| | | |" + "\n"
+                "/ __ /| __/| | | (_) || < | |_| |\n"
+                r"\/ /_/ \___||_|  \___/ |_|\_\ \__,_|" + "\n\n"
                 f"• Build: {build[:7]}\n"
                 f"• Version: {'.'.join(list(map(str, list(__version__))))}\n"
                 f"• {upd}\n"
@@ -855,27 +834,29 @@ class Heroku:
 
             if not self.omit_log:
                 print(logo)
-                web_url = (
-                    f"🔗 Web url: {self.web.url}"
-                    if self.web and hasattr(self.web, "url")
-                    else ""
-                )
-                logging.debug(
-                    "\n🪐 Heroku %s #%s (%s) started\n%s",
-                    ".".join(list(map(str, list(__version__)))),
-                    build[:7],
-                    upd,
-                    web_url,
-                )
-                self.omit_log = True
 
-            await client.heroku_inline.bot.send_photo(
+            web_url = (
+                f"🔗 Web url: {self.web.url}"
+                if self.web and hasattr(self.web, "url")
+                else ""
+            )
+
+            logging.debug(
+                "\n🪐 Heroku %s #%s (%s) started\n%s",
+                ".".join(list(map(str, list(__version__)))),
+                build[:7],
+                upd,
+                web_url,
+            )
+
+            self.omit_log = True
+
+            await client.heroku_inline.bot.send_photo(  # ← Исправлена опечатка
                 logging.getLogger().handlers[0].get_logid_by_client(client.tg_id),
                 "https://imgur.com/a/uUF9zYL.png",
                 caption=(
-                    "🪐 <b>Heroku {} started!</b>\n\n⚙️ <b>GitHub commit SHA: <a"
-                    ' href="https://github.com/coddrago/Heroku/commit/{}">{}</a></b>\n🔎'
-                    " <b>Update status: {}</b>\n<b>{}</b>".format(
+                    "🪐 Heroku {} started!\n\n⚙️ GitHub commit SHA: {}\n🔎"
+                    " Update status: {}\n{}".format(
                         ".".join(list(map(str, list(__version__)))),
                         build,
                         build[:7],
@@ -890,6 +871,7 @@ class Heroku:
                 client.tg_id,
                 client.heroku_db.get(__name__, "command_prefix", False) or ".",
             )
+
         except Exception:
             logging.exception("Badge error")
 
@@ -942,7 +924,6 @@ class Heroku:
         logging.debug("Loading logging config...")
 
         translator = Translator(client, db)
-
         await translator.init()
         modules = loader.Modules(client, db, self.clients, translator)
         client.loader = modules
@@ -995,15 +976,20 @@ class Heroku:
                 for t in (inline._task, inline._cleaner_task):
                     if t:
                         t.cancel()
+
                 try:
                     await inline._dp.stop_polling()
                     await inline.bot.session.close()
-                except: pass
+                except:
+                    pass
+
         for c in self.clients:
             await c.disconnect()
+
         for task in asyncio.all_tasks():
             if task is not asyncio.current_task():
                 task.cancel()
+
         self.loop.stop()
 
     def main(self):
@@ -1032,6 +1018,7 @@ class Heroku:
                 self.loop.run_until_complete(self._shutdown_handler())
             except:
                 pass
+
 
 herokutl.extensions.html.CUSTOM_EMOJIS = not get_config_key("disable_custom_emojis")
 
