@@ -23,9 +23,9 @@ try:
         path=os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     ).active_branch.name
 except Exception:
-    branch = "master"  # Изменено на main, но это не будет использоваться из-за отключения проверки
+    branch = "master"
 
 
 async def check_branch(me_id: int, allowed_ids: list):
-    # Проверка ветки отключена, чтобы убрать зависимость от Git
+    # Проверка ветки отключена для независимости от оригинального репозитория
     pass
